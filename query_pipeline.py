@@ -34,25 +34,57 @@ def _parse_json_from_response(text: str) -> Dict[str, Any]:
 # --- Main Handler ---
 def handle_user_query(user_question: str) -> str:
     current_year = 2025
-    parsing_prompt = textwrap.dedent(
-        f"""
-        You are a query-parsing agent for a university club's knowledge base.
-        Convert the user's question into a JSON object with an 'intent' and 'query'.
+    parsing_prompt = textwrap.dedent(f"""
+You are a query-parsing agent for a university club's knowledge base.
+Convert the user's question into a JSON object with an 'intent' and a 'query'.
 
-        Use "structured" intent for factual queries (who, when, how many).
-        Use "semantic" intent for conceptual queries (what, tell me about).
+TOOLS:
+1. "structured" intent → factual SQL questions (who, when, how many, list all)
+2. "semantic" intent → descriptive / conceptual questions (what, tell me about, topic search)
 
-        Schema includes 'events' and 'chunks' tables with columns like event_domain, speakers, perks, etc.
+DATABASE SCHEMA:
+Table: events
+Columns: [
+    event_id (TEXT, PK),
+    serial_no (INT),
+    name_of_event (TEXT),
+    club_name (TEXT),
+    event_domain (TEXT),
+    date_of_event (DATE),
+    time_of_event (TEXT),
+    faculty_coordinators (TEXT),
+    student_coordinators (TEXT),
+    venue (TEXT),
+    mode_of_event (TEXT),
+    registration_fee (TEXT),
+    speakers (TEXT),
+    perks (TEXT),
+    description_insights (TEXT),
+    event_highlights (TEXT)
+]
 
-        SQL SAFETY RULES:
-        - Always use single quotes (' ') around text in WHERE clauses.
-        - Use ILIKE for partial matches (e.g., WHERE perks ILIKE '%linkedin%').
-        - Never use double quotes in SQL.
+Table: chunks
+Columns: [
+    event_id (TEXT),
+    chunk_id (TEXT),
+    text_chunk (TEXT),
+    embedding (VECTOR)
+]
 
-        User question: "{user_question}"
-        JSON Output:
-        """
-    )
+RULES:
+1. Always use the correct column names — especially 'name_of_event', NOT 'event_name'.
+2. Use ILIKE for string matching (e.g., WHERE perks ILIKE '%linkedin premium%').
+3. For year filters, use: EXTRACT(YEAR FROM date_of_event) = 2025.
+4. Use single quotes only in SQL.
+5. Output JSON only in this format:
+   {{"intent": "structured", "query": "SELECT name_of_event FROM events WHERE ..."}}
+   or
+   {{"intent": "semantic", "query": "linkedin premium"}}
+
+User question: "{user_question}"
+JSON Output:
+""")
+
 
     print(f"[Pipeline] Parsing query: {user_question}")
     try:
@@ -113,3 +145,4 @@ def handle_user_query(user_question: str) -> str:
         return answer.text
     except Exception as e:
         return f"Error during response generation: {e}"
+
