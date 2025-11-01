@@ -3,7 +3,7 @@ from query_pipeline import handle_user_query
 
 st.set_page_config(page_title="Club Knowledge Search Agent", layout="centered")
 
-st.title("🎓 Club Knowledge Search Agent")
+st.title("Bionary Search Agent")
 st.caption("Ask anything about past club events — powered by Gemini + Neon RAG backend")
 
 # Text input
@@ -15,4 +15,5 @@ if user_input:
             answer = handle_user_query(user_input)
             st.markdown(f"**Answer:** {answer}")
         except Exception as e:
+
             st.error(f"Something went wrong: {e}")
