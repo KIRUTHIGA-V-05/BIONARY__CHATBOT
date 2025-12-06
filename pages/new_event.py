@@ -1,27 +1,27 @@
 import streamlit as st
 import frontend as FE
 
-st.title("Add New Event")
+st.title("Add New Event Streamlit page")
 
 with st.form("event_form"):
-    name_of_event = st.text_input("Title (saved as name_of_event if blank)", "").strip() or None
+    name_of_event = st.text_input("Title (will be saved as name_of_event if left blank)")
     event_domain = st.text_input("Domain (e.g., Workshops, Seminar, Competition)")
     description_insights = st.text_area("Description (used for semantic embedding)")
     date_of_event = st.date_input("Date of Event")
     time_of_event = st.text_input("Time (optional)", "N/A")
     venue = st.text_input("Venue (or 'Online')")
-    mode_of_event = st.selectbox("Mode", ["Online", "Offline"])
+    mode_of_event = st.selectbox("Mode", ["Offline", "Online"])
     registration_fee = st.text_input("Registration fee (0 if free)", "0")
     speakers = st.text_input("Speakers (comma separated, optional)", "N/A")
     perks = st.text_input("Perks (comma separated, optional)", "N/A")
     faculty_coordinators = st.text_input("Faculty coordinators (optional)", "N/A")
     student_coordinators = st.text_input("Student coordinators (optional)", "N/A")
 
-    submit = st.form_submit_button("Submit Event")
+    submitted = st.form_submit_button("Submit Event")
 
-if submit:
+if submitted:
     form_data = {
-        "name_of_event": name_of_event,
+        "name_of_event": name_of_event if name_of_event else None,
         "event_domain": event_domain,
         "description_insights": description_insights,
         "date_of_event": str(date_of_event),
@@ -35,13 +35,10 @@ if submit:
         "student_coordinators": student_coordinators
     }
 
-    status = st.info("Submitting event...")
-
+    st.info("Submitting event... (this may take a few seconds if the model is loading)")
     result = FE.ingest_event(form_data)
 
-    status.empty()
-
     if isinstance(result, tuple) and result[0] is True:
-        st.success("Event added successfully! ")
+        st.success("Event added successfully.")
     else:
-        st.error("Ingestion failed ")
+        st.error("Ingestion failed.")
