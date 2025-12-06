@@ -29,7 +29,7 @@ def _is_report_query(text):
 
 def _build_report(year):
     sql = f"""
-        SELECT name_of_event, date_of_event, time_of_event, venue, event_domain
+        SELECT date_of_event, name_of_event, event_domain, venue, time_of_event
         FROM events
         WHERE EXTRACT(YEAR FROM date_of_event) = {year}
         ORDER BY date_of_event;
@@ -39,28 +39,32 @@ def _build_report(year):
         return "I couldn't generate a report because the database query failed."
     if len(rows) == 1 and rows[0][0] in ("No results", "Database connection error."):
         return "I couldn't find any events for that year in the database."
-    lines = []
-    for name, date, time, venue, domain in rows:
-        lines.append(f"{name} — {date} — {time} — {venue} — {domain}")
-    if not lines:
-        return "I couldn't find any events for that year in the database."
-    header = f"Report of events in {year}:\n"
-    body = "\n".join(lines)
-    return header + body
+
+    header = f"# CLUB EVENTS ANNUAL ACTIVITY REPORT ({year})\n\n"
+    table_header = "| Date | Event Name | Domain | Venue | Time |\n|------|-------------|--------|-------|------|\n"
+    table_rows = ""
+
+    for date, name, domain, venue, time in rows:
+        table_rows += f"| {date} | {name} | {domain} | {venue} | {time} |\n"
+
+    return header + table_header + table_rows
 
 def _answer_from_context(question, context):
     if not context.strip():
         return "I couldn't find this information in the database."
     prompt = f"""
-You are an assistant answering questions ONLY about events stored in an internal database of a college club.
-Use ONLY the information given in the DATABASE block below.
-If the database does not contain enough information to answer, say exactly:
+You answer ONLY using the database information below.
+Do not use any knowledge beyond the database.
+If the answer is not in the database, say:
 "I couldn't find this information in the database."
-QUESTION:
+
+Question:
 {question}
-DATABASE:
+
+Database:
 {context}
-Answer concisely:
+
+Final Answer:
 """
     resp = model.generate_content(prompt)
     return resp.text
@@ -69,7 +73,6 @@ def handle_user_query(user_question):
     if _is_report_query(user_question):
         year = _extract_year(user_question)
         return _build_report(year)
-
     ctx_list = R.query_vector_db(user_question)
     context = "\n".join(ctx_list)
     if ctx_list and ctx_list[0] in ("Connection error", "Embedding error", "No matches"):
