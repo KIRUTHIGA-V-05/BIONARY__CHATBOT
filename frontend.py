@@ -98,7 +98,7 @@ def add_new_event(form_data: Dict[str, Any]) -> Dict[str, Any]:
                         registration_fee, speakers, perks,
                         description_insights,
                         search_text, embedding
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     parms = (
                         form_data.get("name_of_event"),
