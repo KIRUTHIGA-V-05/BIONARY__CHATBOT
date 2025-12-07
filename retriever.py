@@ -47,9 +47,9 @@ def query_vector_db(text):
     conn = _connect_to_db()
     if not conn:
         return ["Connection error"]
-
+    
     q = _clean(text)
-
+    
     try:
         emb = model.encode(q)
         if isinstance(emb, np.ndarray):
@@ -103,6 +103,7 @@ def add_new_event(form_data):
     try:
         desc = (form_data.get("description_insights", "") or "").strip()
         perks = (form_data.get("perks", "") or "").strip()
+        collab = (form_data.get("collaboration", "") or "").strip()
 
         search_text = (
             f"Event: {form_data.get('name_of_event', '')}\n"
@@ -116,8 +117,7 @@ def add_new_event(form_data):
             emb = emb.tolist()
 
         parms = (
-            form_data.get("name_of_event"),
-            0,
+            form_data.get("serial_no", 0),
             form_data.get("name_of_event"),
             form_data.get("event_domain"),
             form_data.get("date_of_event"),
@@ -128,7 +128,8 @@ def add_new_event(form_data):
             form_data.get("mode_of_event", "N/A"),
             form_data.get("registration_fee", "0"),
             form_data.get("speakers", "N/A"),
-            form_data.get("perks", "N/A"),
+            perks,
+            collab,
             desc,
             search_text,
             emb,
@@ -139,13 +140,24 @@ def add_new_event(form_data):
             cur.execute(
                 """
                 INSERT INTO events (
-                    event_id, serial_no, name_of_event, event_domain,
-                    date_of_event, time_of_event, faculty_coordinators,
-                    student_coordinators, venue, mode_of_event,
-                    registration_fee, speakers, perks,
-                    description_insights, search_text, embedding
+                    serial_no,
+                    name_of_event,
+                    event_domain,
+                    date_of_event,
+                    time_of_event,
+                    faculty_coordinators,
+                    student_coordinators,
+                    venue,
+                    mode_of_event,
+                    registration_fee,
+                    speakers,
+                    perks,
+                    collaboration,
+                    description_insights,
+                    search_text,
+                    embedding
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 parms,
             )
