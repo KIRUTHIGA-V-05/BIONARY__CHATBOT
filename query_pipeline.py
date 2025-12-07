@@ -15,7 +15,12 @@ def _extract_year(text):
 
 def _detect_intent(question):
     prompt = f"""
-Classify the user's intent into one of these:
+Classify the user's intent.
+
+If the user asks about all events in a year, month, semester, or club-wide activities,
+ALWAYS classify as: MULTI
+
+Intent categories:
 MULTI
 SINGLE
 ANALYTICS
@@ -23,7 +28,16 @@ FILTER
 DESCRIBE
 RECOMMEND
 
+Examples of MULTI:
+"list all the events this year"
+"what all events happened in 2025"
+"events this month"
+"show club events"
+"tell me all events"
+"give a report on 2024 events"
+
 User question: "{question}"
+
 Respond ONLY with: MULTI, SINGLE, ANALYTICS, FILTER, DESCRIBE, or RECOMMEND
 """
     resp = model.generate_content(prompt).text.strip().upper()
@@ -34,13 +48,10 @@ Respond ONLY with: MULTI, SINGLE, ANALYTICS, FILTER, DESCRIBE, or RECOMMEND
     if "RECOMMEND" in resp: return "RECOMMEND"
     return "SINGLE"
 
-def _safe_rows(rows):
-    if not rows:
-        return []
-    if isinstance(rows[0][0], str) and rows[0][0].startswith("SQL error"):
-        return []
-    if rows[0][0] in ("No results", "Connection error"):
-        return []
+def _safe(rows):
+    if not rows: return []
+    if isinstance(rows[0][0], str) and rows[0][0].startswith("SQL error"): return []
+    if rows[0][0] in ("No results", "Connection error"): return []
     return rows
 
 def _build_report(year):
@@ -50,79 +61,99 @@ def _build_report(year):
         WHERE EXTRACT(YEAR FROM date_of_event) = {year}
         ORDER BY date_of_event;
     """
-    rows = _safe_rows(R.query_relational_db(sql))
+    rows = _safe(R.query_relational_db(sql))
     if not rows:
         return f"No events found for {year}."
 
-    table = "| Date | Event | Domain | Venue | Time |\n|------|-------|--------|-------|------|\n"
-    for d, n, dom, v, t in rows:
-        table += f"| {d} | {n} | {dom} | {v} | {t} |\n"
+    dates = [r[0] for r in rows if r[0] is not None]
+    total_events = len(rows)
+    min_d = min(dates) if dates else year
+    max_d = max(dates) if dates else year
+    period = f"{min_d} – {max_d}" if dates else f"{year}"
 
-    return f"Events in {year}:\n\n{table}"
-
-def _build_partial_summary(question):
-    ctx = R.query_vector_db(question)
-    if not ctx or "No matches" in ctx[0]:
-        return "No related events found."
-    text = ""
-    for c in ctx:
-        text += c + "\n"
-    return text
-
-def _build_filtered_table(question):
-    ctx = R.query_vector_db(question)
-    if not ctx or "No matches" in ctx[0]:
-        return "No matches."
-    return "\n".join(ctx)
-
-def _build_analytics(question):
-    year = _extract_year(question)
-    sql = f"""
+    sql2 = f"""
         SELECT event_domain, COUNT(*)
         FROM events
         WHERE EXTRACT(YEAR FROM date_of_event) = {year}
+        GROUP BY event_domain;
+    """
+    domain_rows = _safe(R.query_relational_db(sql2))
+
+    sql3 = f"""
+        SELECT venue, COUNT(*)
+        FROM events
+        WHERE EXTRACT(YEAR FROM date_of_event) = {year}
+        GROUP BY venue;
+    """
+    venue_rows = _safe(R.query_relational_db(sql3))
+
+    header = f"# CLUB EVENTS ANNUAL ACTIVITY REPORT ({year})\n\n"
+    execu = f"## 0. Executive Summary\n\nTotal Events: {total_events}\nPeriod: {period}\n\n"
+    
+    table = "## 1. Chronological Event Overview\n\n| Date | Event | Domain | Venue | Time |\n|------|-------|--------|-------|------|\n"
+    for d, n, dom, v, t in rows:
+        table += f"| {d} | {n} | {dom} | {v} | {t} |\n"
+    table += "\n"
+
+    domain_sec = "## 2. Domain Distribution\n\n| Domain | Count |\n|--------|-------|\n"
+    if domain_rows:
+        for d, c in domain_rows:
+            domain_sec += f"| {d} | {c} |\n"
+    else:
+        domain_sec += "| N/A | 0 |\n"
+    domain_sec += "\n"
+
+    venue_sec = "## 3. Venue Breakdown\n\n| Venue | Count |\n|-------|-------|\n"
+    if venue_rows:
+        for v, c in venue_rows:
+            venue_sec += f"| {v} | {c} |\n"
+    else:
+        venue_sec += "| N/A | 0 |\n"
+    venue_sec += "\n"
+
+    return header + execu + table + domain_sec + venue_sec
+
+def _build_analytics(q):
+    y = _extract_year(q)
+    sql = f"""
+        SELECT event_domain, COUNT(*)
+        FROM events
+        WHERE EXTRACT(YEAR FROM date_of_event) = {y}
         GROUP BY event_domain
         ORDER BY COUNT(*) DESC;
     """
-    rows = _safe_rows(R.query_relational_db(sql))
-    if not rows:
-        return "No data."
-    out = f"Analytics for {year}:\n\n| Domain | Count |\n|--------|-------|\n"
-    for d, c in rows:
-        out += f"| {d} | {c} |\n"
-    return out
+    rows = _safe(R.query_relational_db(sql))
+    if not rows: return "No data."
+    o = f"Analytics for {y}:\n\n| Domain | Count |\n|--------|-------|\n"
+    for d, c in rows: o += f"| {d} | {c} |\n"
+    return o
 
-def _build_description(question):
-    ctx = R.query_vector_db(question)
-    if not ctx or "No matches" in ctx[0]:
-        return "No details found."
+def _build_filtered(q):
+    ctx = R.query_vector_db(q)
+    if not ctx or "No matches" in ctx[0]: return "No matches."
+    return "\n".join(ctx)
+
+def _build_description(q):
+    ctx = R.query_vector_db(q)
+    if not ctx or "No matches" in ctx[0]: return "No details found."
     return ctx[0]
 
-def _build_recommendations(question):
-    ctx = R.query_vector_db(question)
-    if not ctx or "No matches" in ctx[0]:
-        return "No recommended events found."
+def _build_recommend(q):
+    ctx = R.query_vector_db(q)
+    if not ctx or "No matches" in ctx[0]: return "No recommended events found."
     return "\n".join(ctx[:3])
 
-def _single_event_answer(question):
-    ctx = R.query_vector_db(question)
-    if not ctx or "No matches" in ctx[0]:
-        return "Not found."
+def _single(q):
+    ctx = R.query_vector_db(q)
+    if not ctx or "No matches" in ctx[0]: return "Not found."
     return ctx[0]
 
-def handle_user_query(question):
-    intent = _detect_intent(question)
-    year = _extract_year(question)
-    if intent == "MULTI":
-        if str(year) in question:
-            return _build_report(year)
-        return _build_partial_summary(question)
-    if intent == "FILTER":
-        return _build_filtered_table(question)
-    if intent == "ANALYTICS":
-        return _build_analytics(question)
-    if intent == "DESCRIBE":
-        return _build_description(question)
-    if intent == "RECOMMEND":
-        return _build_recommendations(question)
-    return _single_event_answer(question)
+def handle_user_query(q):
+    intent = _detect_intent(q)
+    y = _extract_year(q)
+    if intent == "MULTI": return _build_report(y)
+    if intent == "FILTER": return _build_filtered(q)
+    if intent == "ANALYTICS": return _build_analytics(q)
+    if intent == "DESCRIBE": return _build_description(q)
+    if intent == "RECOMMEND": return _build_recommend(q)
+    return _single(q)
