@@ -42,7 +42,7 @@ class EventData(BaseModel):
     registration_fee: Optional[str] = "0"
     speakers: Optional[str] = "N/A"
     perks: Optional[str] = "N/A"
-    event_highlights: Optional[str] = ""
+    collaboration: Optional[str] = "N/A"
 
 # --- Endpoints ---
 
